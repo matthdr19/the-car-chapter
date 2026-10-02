@@ -1,0 +1,13 @@
+{
+  "name": "tcc-intake",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "The Car Chapter Intake Pilot v0.2",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.8.0"
+  }
+}
