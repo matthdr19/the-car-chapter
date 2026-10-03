@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import {
+  ALLOWED_MIME_TYPES,
   MAX_FILE_BYTES,
   MAX_FILES,
   MIN_FILES,
@@ -177,4 +178,58 @@ test('shared/rules.js is browser-safe: no Node-only imports or globals', () => {
   assert.equal(/\bprocess\./.test(source), false);
   assert.equal(/\bBuffer\b/.test(source), false);
   assert.equal(/^\s*import\s/m.test(source), false);
+});
+
+test('ALLOWED_MIME_TYPES is a frozen array', () => {
+  assert.equal(Array.isArray(ALLOWED_MIME_TYPES), true);
+  assert.equal(Object.isFrozen(ALLOWED_MIME_TYPES), true);
+  assert.throws(() => ALLOWED_MIME_TYPES.push('image/gif'), TypeError);
+  assert.throws(() => { ALLOWED_MIME_TYPES[0] = 'image/gif'; }, TypeError);
+  assert.equal(ALLOWED_MIME_TYPES.length, 5);
+});
+
+test('ALLOWED_MIME_TYPES holds exactly the five canonical types, in the canonical order', () => {
+  assert.deepEqual([...ALLOWED_MIME_TYPES], ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+  assert.equal(new Set(ALLOWED_MIME_TYPES).size, 5);
+});
+
+test('every ALLOWED_MIME_TYPES entry maps through extForMime to a distinct extension and a pathname', () => {
+  const extensions = ALLOWED_MIME_TYPES.map((mime) => extForMime(mime));
+  assert.deepEqual(extensions, ['jpg', 'png', 'webp', 'heic', 'heif']);
+  assert.equal(extensions.includes(null), false);
+  assert.equal(new Set(extensions).size, ALLOWED_MIME_TYPES.length);
+  for (const mime of ALLOWED_MIME_TYPES) {
+    const pathname = blobPathname({ pilotRef: 'p1', caseId: CASE_ID, sourceId: SOURCE_ID, mime });
+    assert.equal(pathname, `cases/p1/${CASE_ID}/${SOURCE_ID}.${extForMime(mime)}`);
+  }
+});
+
+test('isAllowedMime agrees with ALLOWED_MIME_TYPES for members, non-members and odd inputs', () => {
+  const probes = [
+    ...ALLOWED_MIME_TYPES,
+    'image/gif', 'image/avif', 'IMAGE/JPEG', ' image/png', 'image/png ', '',
+    'constructor', '__proto__', 'toString', null, undefined, 42, {}, [],
+  ];
+  for (const probe of probes) {
+    assert.equal(isAllowedMime(probe), ALLOWED_MIME_TYPES.includes(probe), String(probe));
+  }
+  for (const mime of ALLOWED_MIME_TYPES) assert.equal(isAllowedMime(mime), true, mime);
+});
+
+test('mimeFromExtension agrees with the canonical mapping for every allowed type', () => {
+  for (const mime of ALLOWED_MIME_TYPES) {
+    const ext = extForMime(mime);
+    assert.equal(mimeFromExtension(`photo.${ext}`), mime);
+    assert.equal(mimeFromExtension(`PHOTO.${ext.toUpperCase()}`), mime);
+  }
+  assert.equal(mimeFromExtension('photo.jpeg'), 'image/jpeg'); // the one extra alias
+});
+
+test('rules.js derives ALLOWED_MIME_TYPES from the mapping instead of listing the types twice', () => {
+  const source = readFileSync(new URL('../shared/rules.js', import.meta.url), 'utf8');
+  assert.match(source, /export const ALLOWED_MIME_TYPES = Object\.freeze\(Object\.keys\(EXT_BY_MIME\)\);/);
+  assert.equal(/ALLOWED_MIME_TYPES\s*=\s*(Object\.freeze\()?\[/.test(source), false);
+  // The mapping is where each allowed type is written down: once, as a key.
+  const keyLines = source.match(/^\s+'image\/[a-z]+': '/gm) || [];
+  assert.equal(keyLines.length, 5);
 });

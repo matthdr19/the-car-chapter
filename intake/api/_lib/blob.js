@@ -5,14 +5,9 @@
 // identifiers (cases/{pilotRef}/{caseId}/{sourceId}.{ext}); a caller-supplied pathname is never
 // accepted or used. SDK errors propagate unchanged, except a missing blob where noted.
 import { issueSignedToken, presignUrl, head, del, BlobNotFoundError } from '@vercel/blob';
-import { SIGNED_URL_TTL_MS, blobPathname, isValidFileSize } from '../../shared/rules.js';
+import { ALLOWED_MIME_TYPES, SIGNED_URL_TTL_MS, blobPathname, isValidFileSize } from '../../shared/rules.js';
 
 const defaultSdk = Object.freeze({ issueSignedToken, presignUrl, head, del });
-
-// The five canonical source formats currently allowed by shared/rules.js, in a fixed order.
-// rules.js exports no iterable collection of them, so they are listed here; a test keeps this
-// list in step with rules.js.
-const SOURCE_MIMES = Object.freeze(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
 
 // The real BlobNotFoundError has name === 'Error', so only instanceof identifies it.
 const isNotFound = (error) => error instanceof BlobNotFoundError;
@@ -59,12 +54,13 @@ export async function headSource({ pilotRef, caseId, sourceId, mime }, { sdk = d
   }
 }
 
-// Deletes every canonical variant of one source identity. The extension is part of the
-// pathname, so the caller's MIME is neither needed nor trusted: all five variants under exactly
-// this pilotRef/caseId/sourceId are attempted, in a fixed order. Idempotent: a missing variant
-// is skipped. Any other SDK error propagates unchanged and stops the loop, which is safe to retry.
+// Deletes every allowed variant of one source identity. The extension is part of the
+// pathname, so the caller's MIME is neither needed nor trusted: one variant per entry of
+// ALLOWED_MIME_TYPES, all under exactly this pilotRef/caseId/sourceId, is attempted in that
+// order. Idempotent: a missing variant is skipped. Any other SDK error propagates unchanged and
+// stops the loop, which is safe to retry.
 export async function deleteSource({ pilotRef, caseId, sourceId }, { sdk = defaultSdk } = {}) {
-  const pathnames = SOURCE_MIMES.map((mime) => blobPathname({ pilotRef, caseId, sourceId, mime }));
+  const pathnames = ALLOWED_MIME_TYPES.map((mime) => blobPathname({ pilotRef, caseId, sourceId, mime }));
   for (const pathname of pathnames) {
     try {
       await sdk.del(pathname);

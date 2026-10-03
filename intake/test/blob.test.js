@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { BlobNotFoundError } from '@vercel/blob';
 import { signUpload, headSource, deleteSource } from '../api/_lib/blob.js';
-import { MAX_FILE_BYTES, SIGNED_URL_TTL_MS, extForMime, isAllowedMime } from '../shared/rules.js';
+import { ALLOWED_MIME_TYPES, MAX_FILE_BYTES, SIGNED_URL_TTL_MS, blobPathname } from '../shared/rules.js';
 
 // SDK doubles only: no network, no credentials, and nothing real is ever signed.
 const CASE_ID = '3f2b8c1e-5a4d-4e7f-9b21-0c6d8a9e1f23';
@@ -310,17 +310,14 @@ test('deleteSource validates identifiers before any SDK call', async () => {
   assert.equal(noCalls(calls), true);
 });
 
-test('the five delete variants stay in step with the canonical MIME and extension rules', () => {
-  const extensions = CANONICAL_MIMES.map((mime) => {
-    assert.equal(isAllowedMime(mime), true, mime);
-    return extForMime(mime);
-  });
-  assert.deepEqual(extensions, CANONICAL_EXTENSIONS);
-  assert.equal(new Set(extensions).size, 5);
-  // Formats that are not allowed must stay out, so a drift in rules.js shows up here.
-  for (const mime of ['image/gif', 'image/avif', 'image/tiff', 'image/bmp', 'image/svg+xml']) {
-    assert.equal(isAllowedMime(mime), false, mime);
-  }
+test('deleteSource derives its variants from the exported ALLOWED_MIME_TYPES collection', async () => {
+  const { sdk, calls } = makeSdk();
+  await deleteSource(identity(), { sdk });
+  const derived = ALLOWED_MIME_TYPES.map((mime) => blobPathname({ ...identity(), mime }));
+  assert.deepEqual(calls.del, derived);
+  assert.equal(calls.del.length, ALLOWED_MIME_TYPES.length);
+  // Pins the current canonical order and extensions at the integration level as well.
+  assert.deepEqual(calls.del, allFive(identity()));
 });
 
 // ---- isolation ----
@@ -402,4 +399,13 @@ test('blob.js has no env, logging, URLs, HTTP, auth or caller-supplied pathname 
   assert.equal(signatures.find(([name]) => name === 'deleteSource')[1], 'pilotRef, caseId, sourceId');
   // Wording: the PUT is scoped to the pathname and constraints, not described as single-use.
   assert.equal(/single-use/i.test(source), false);
+});
+
+test('blob.js keeps no handwritten MIME list and takes its variants from rules.js', () => {
+  const source = readFileSync(new URL('../api/_lib/blob.js', import.meta.url), 'utf8');
+  const code = source.replace(/^\s*\/\/.*$/gm, '');
+  assert.equal(/SOURCE_MIMES/.test(source), false);
+  assert.equal(/'image\//.test(code), false);
+  assert.match(code, /import \{[^}]*\bALLOWED_MIME_TYPES\b[^}]*\} from '\.\.\/\.\.\/shared\/rules\.js';/);
+  assert.match(code, /ALLOWED_MIME_TYPES\.map\(/);
 });

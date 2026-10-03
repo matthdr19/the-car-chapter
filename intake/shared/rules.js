@@ -23,6 +23,10 @@ const EXT_BY_MIME = Object.freeze({
   'image/heif': 'heif',
 });
 
+// Every allowed source MIME type, in the mapping's own order. Derived from EXT_BY_MIME so that
+// mapping stays the single source of truth: there is no second handwritten list of types.
+export const ALLOWED_MIME_TYPES = Object.freeze(Object.keys(EXT_BY_MIME));
+
 const MIME_BY_EXT = Object.freeze({
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
