@@ -16,6 +16,7 @@ const ERRORS = Object.freeze({
   payload_too_large: 413,
   invalid_json: 400,
   invalid_body: 400,
+  invalid_request: 400,
   server_error: 500,
 });
 

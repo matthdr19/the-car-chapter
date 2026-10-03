@@ -96,7 +96,7 @@ test('jsonResponse sets status, body and the safe headers', async () => {
 test('errorResponse covers exactly the known codes with their statuses and fixed bodies', async () => {
   const expected = {
     method_not_allowed: 405, unauthorized: 401, unsupported_media_type: 415, payload_too_large: 413,
-    invalid_json: 400, invalid_body: 400, server_error: 500,
+    invalid_json: 400, invalid_body: 400, invalid_request: 400, server_error: 500,
   };
   for (const [code, status] of Object.entries(expected)) {
     const response = errorResponse(code);
@@ -117,6 +117,16 @@ test('errorResponse covers exactly the known codes with their statuses and fixed
 
 test('methodNotAllowed is the 405 error response', async () => {
   assert.deepEqual(await snapshot(methodNotAllowed()), await snapshot(errorResponse('method_not_allowed')));
+});
+
+test('invalid_request is a 400 with the fixed body and no extra headers', async () => {
+  const response = errorResponse('invalid_request');
+  assert.equal(response.status, 400);
+  assert.equal(await response.text(), '{"error":"invalid_request"}');
+  assert.equal(response.headers.get('www-authenticate'), null);
+  assert.equal(response.headers.get('allow'), null);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
 });
 
 // ---- method guard ----
